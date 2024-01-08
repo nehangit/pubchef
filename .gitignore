@@ -1,6 +1,7 @@
 # General
 *.log
 *.jpg
+!default.jpg
 *.png
 
 # IDE
