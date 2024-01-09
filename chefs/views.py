@@ -16,13 +16,16 @@ from django.conf import settings
 # Need a reset password (partial auth) and email validation when registering
 # Rate limiting for logging in, register(email), item posting, item searching. Field validation on frontend
 # Limit filesize of image uploads for profile pictures and items
+
+# DONE
 # Get a certain number of items, sort items where available = true and chef working = true first, 
 # get items by name, get items by chef name, get items by price range, get items by chef cuisine, 
 # get item by id
+
 # get item_images by itemid
 # package app, delete dev lines, push to prod
 
-# Later on a View to post a rating, rating model, also add images model.
+# Later on a View to post a rating, rating model
 # message: logged out, unauthenticated, expired token = redirect to login page
 
 secret = 'FDSIEnfasdeipPOSDFKer'
@@ -122,7 +125,10 @@ class ChefView(APIView):
             payload = getPayload(request) # for a chef checking their own profile...
             chef = models.User.objects.filter(id=payload['id']).first().chef
         else:
-            chef = models.Chef.objects.filter(id=chefid).first()
+            try:
+                chef = models.Chef.objects.filter(id=chefid).first()
+            except:
+                return Response({"message": "Invalid input"}, status=status.HTTP_400_BAD_REQUEST)
             if chef is None:
                 return Response({"message": "Chef not found"}, status=status.HTTP_404_NOT_FOUND) 
         serializer = serializers.ChefSerializer(chef)
@@ -158,28 +164,31 @@ class ItemView(APIView):
         paginator = PageNumberPagination()
         paginator.page_size = 10
         items = models.Item.objects.all()
-
-        if itemid:
-            items = items.filter(id=itemid)
-            if not items.exists():
-                return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
-            return Response(serializers.ItemSerializer(items.first()).data)
-        if chefid:
-            items = items.filter(chef__id=chefid)
-            page = paginator.paginate_queryset(items, request)
-            ser = serializers.ItemSerializer(page, many=True)
-            return paginator.get_paginated_response(ser.data)
-        if name:
-            items = items.filter(name__icontains=name)
-        if chef_name:
-            items = items.annotate(chef_full_name=Concat('chef__user__first_name', Value(' '), 'chef__user__last_name'))
-            items = items.filter(chef_full_name__icontains=chef_name)
-        if min_price:
-            items = items.filter(price__gte=float(min_price))
-        if max_price:
-            items = items.filter(price__lte=float(max_price))
-        if cuisine:
-            items = items.filter(chef__cuisine__icontains=cuisine)
+        try:
+            if itemid:
+                items = items.filter(id=itemid)        
+                if not items.exists():
+                    return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
+                return Response(serializers.ItemSerializer(items.first()).data)
+            if chefid:
+                items = items.filter(chef__id=chefid)
+                page = paginator.paginate_queryset(items, request)
+                ser = serializers.ItemSerializer(page, many=True)
+                return paginator.get_paginated_response(ser.data)
+            if name:
+                items = items.filter(name__icontains=name)
+            if chef_name:
+                items = items.annotate(chef_full_name=Concat('chef__user__first_name', Value(' '), 'chef__user__last_name'))
+                items = items.filter(chef_full_name__icontains=chef_name)
+            if min_price:
+                items = items.filter(price__gte=float(min_price))
+            if max_price:
+                items = items.filter(price__lte=float(max_price))
+            if cuisine:
+                items = items.filter(chef__cuisine__icontains=cuisine)
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
+        
         items = items.order_by('-available', '-chef__working')
         page = paginator.paginate_queryset(items, request)
         serializer = serializers.ItemSerializer(page, many=True)
@@ -198,12 +207,14 @@ class ItemView(APIView):
     
     def put(self, request):  # pass in item id
         payload = getPayload(request)
-        chef = models.User.objects.filter(id=payload['id']).first().chef
-        items = models.Item.objects.filter(id=request.data.get('id'))
+        try:
+            items = models.Item.objects.filter(id=request.data.get('id'))
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
         if not items.exists():
             return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
         item = items.first()
-        if item.chef.id is not chef.id:
+        if item.chef.user.id != payload['id']:
             raise AuthenticationFailed("Unauthenticated")
         serializer = serializers.ItemSerializer(item, data=request.data, partial=True)
         if(serializer.is_valid()):
@@ -213,21 +224,63 @@ class ItemView(APIView):
 
     def delete(self, request): # pass in item id
         payload = getPayload(request)
-        chef_id = models.User.objects.filter(id=payload['id']).first().chef.id
-        items = models.Item.objects.filter(id=request.data.get('id'))
+        try:
+            items = models.Item.objects.filter(id=request.data.get('id'))
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
         if not items.exists():
             return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
         item = items.first()
-        if item.chef.id is not chef_id:
+        if item.chef.user.id != payload['id']:
             raise AuthenticationFailed("Unauthenticated")
         item.delete()
         return Response({'message': 'Deleted item'})
 
-class ItemImageView:
+# standardize inputs format
+class ItemImageView(APIView):
     def get(self, request):
-        pass
-    def post(self, request):
-        pass
+        itemid = request.query_params.get("id")
+        if itemid is None:
+            return Response({'message': 'Provide item id.'})
+        try:
+            itemimages = models.ItemImage.objects.filter(item__id=itemid)
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
+        serializer = serializers.ItemImageSeriliazer(itemimages, many=True)
+        return Response(serializer.data)
 
+    def post(self, request):
+        payload = getPayload(request)
+        try:
+            item = models.Item.objects.filter(id=request.data.get("item")).first()
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
+        if item is None:
+            return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
+        if item.itemimage_set.count() >= 3:
+            return Response({'message': 'Only 3 images allowed per item.'}, status=status.HTTP_400_BAD_REQUEST)
+        if item.chef.user.id != payload['id']:
+            raise AuthenticationFailed("Unauthorized.")
+        serializer = serializers.ItemImageSeriliazer(data=request.data)
+        if(serializer.is_valid()):
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    def delete(self, request):
+        payload = getPayload(request)
+        imgid = request.data.get("image")
+        try:
+            itemimg = models.ItemImage.objects.filter(id=imgid).first()
+        except:
+            return Response({"message": "Format error"}, status=status.HTTP_400_BAD_REQUEST)
+        if itemimg is None:
+            return Response({"message": "Image not found"}, status=status.HTTP_404_NOT_FOUND)
+        if itemimg.item.chef.user.id != payload['id']:
+            raise AuthenticationFailed("Unauthorized.")
+        os.remove(itemimg.image.path)
+        itemimg.delete()
+        return Response({'message': 'Deleted Image'}) # return other images?
+        
 def getMenus(request):
     return HttpResponse("Menus.")

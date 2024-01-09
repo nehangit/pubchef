@@ -62,3 +62,9 @@ class ItemSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+    
+class ItemImageSeriliazer(serializers.ModelSerializer):
+    class Meta():
+        model = models.ItemImage
+        fields = ['id', 'item', 'image']
+    

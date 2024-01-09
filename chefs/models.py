@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 import string, random
+import magic
+from django.core.exceptions import ValidationError
 
 def item_image_path(instance, filename):
     name, ext = filename.split('.')
@@ -11,9 +13,15 @@ def profilepic_image_path(instance, filename):
     name, ext = filename.split('.')
     filename = ''.join(random.choices(string.ascii_lowercase, k=7))
     return f"profilepics/{filename}.{ext}".format(filename=filename)
+
+
+def validate_file_type(value):
+    file_type = magic.from_buffer(value.read(1024), mime=True)
+    if file_type not in ['image/jpeg', 'image/png', 'image/x-icon']:
+        raise ValidationError('Unsupported file type.')
+    
 # Create your models here.
 # Add verbose names and help text
-
 class User(AbstractUser):
     email = models.EmailField(max_length=50, unique=True)
     password = models.CharField(max_length=50)
@@ -26,7 +34,8 @@ class User(AbstractUser):
 
 class Chef(models.Model):
     cuisine = models.CharField(max_length=50)
-    profilepic = models.ImageField(upload_to=profilepic_image_path, default='profilepics/default.jpg')
+    profilepic = models.ImageField(upload_to=profilepic_image_path, validators=[validate_file_type], 
+                                   default='profilepics/default.jpg')
     meanrating = models.DecimalField(max_digits=2, decimal_places=1)
     bio = models.TextField()
     user = models.OneToOneField(User, on_delete=models.CASCADE)
@@ -49,15 +58,7 @@ class Item(models.Model): # add a count attribute? can use default field to make
 
 class ItemImage(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
-    image = models.ImageField(upload_to=item_image_path)
+    image = models.ImageField(upload_to=item_image_path, validators=[validate_file_type])
 
     def __str__(self):
         return self.image.url
-"""
-class ChefImage(models.Model):
-    chef = models.OneToOneField(Chef, on_delete=models.CASCADE)
-    image = models.ImageField(upload_to=chef_image_path)
-
-    def __str__(self):
-        return self.image.url4
-"""
