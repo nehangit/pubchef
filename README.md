@@ -10,13 +10,13 @@
 
 ## Install Python dependencies
 
-`git clone https://github.com/nehangit/pubchef_rest_api.git`
+`git clone https://github.com/nehangit/pubchef.git`
 
-`cd pubchef_rest_api`
+`cd pubchef`
 
 `pip install -r requirements.txt`
 
-## Create SQLite databse, run migrations
+## Create SQLite database, run migrations
 
 `(python manage.py makemigrations chefs)`
 
