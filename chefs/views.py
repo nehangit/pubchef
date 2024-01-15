@@ -28,7 +28,7 @@ from django.conf import settings
 # Later on a View to post a rating, rating model
 # message: logged out, unauthenticated, expired token = redirect to login page
 
-secret = 'FDSIEnfasdeipPOSDFKer'
+secret = 'FDSIEnfasdeipPOSDFKer' # eventually store in .env and add .env to gitignore
 
 def getPayload(request):
         token = request.COOKIES.get('jwt')
@@ -74,7 +74,7 @@ class LoginView(APIView):
         token = jwt.encode(payload, secret, algorithm='HS256')
 
         response = Response({'jwt': token})
-        response.set_cookie('jwt', token, httponly=True)
+        response.set_cookie('jwt', token, httponly=True) #add secure=True to make it for https only
         return response
 
 class LogoutView(APIView):
